@@ -7,7 +7,7 @@ const storage = multer.diskStorage({
     destination,
     filename: (req, file, cb) => {
         const {email} = req.user
-        const uniquePrefix = `${Date.now()}-${email}`;
+        const uniquePrefix = `${Date.now()}-${Math.round(Math.random()*1E9)}`;
         const filename = `${uniquePrefix}_${file.originalname}`;
         cb(null, filename)
     }
