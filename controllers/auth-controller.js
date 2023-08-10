@@ -98,10 +98,12 @@ const updateAvatar = async (req, res) => {
     const avatarURL = path.join("avatars", filename);
     
     
-    const { _id} = req.user;
+    const { _id } = req.user;
     await User.findByIdAndUpdate(_id, { avatarURL: avatarURL }, { new: true });
     
-    res.json({ avatarURL : `http://localhost:${PORT}/${avatarURL}`})
+    // res.json({ avatarURL : `http://localhost:${PORT}/${avatarURL}`});
+    res.json({ avatarURL : avatarURL})
+    
 }
 
 export default {
