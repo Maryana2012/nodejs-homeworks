@@ -1,13 +1,18 @@
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
+import fs from "fs/promises";
+import path from "path";
+import gravatar from "gravatar";
 import User from "../models/user.js";
+import Jimp from "jimp";
 
 dotenv.config();
-const { SECRET_KEY } = process.env;
+const { SECRET_KEY, PORT } = process.env;
 
 const register = async (req, res) => {
-    const { email, password} = req.body;
+    const { email, password } = req.body;
+    const avatarURL = gravatar.url(email, { s: '200' });
     const user = await User.findOne({ email });
   
     if (user) {
@@ -15,16 +20,16 @@ const register = async (req, res) => {
         return;
     }
     const hashPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({...req.body, password:hashPassword});
+    const newUser = await User.create({...req.body, password:hashPassword, avatarURL});
 
     res.status(201).json({
         user: {
             email: newUser.email,
-            subscription: newUser.subscription
+            subscription: newUser.subscription,
+            avatarURL: avatarURL
         }
     })
 };
-
 
 const login = async(req, res) => {
     const { email, password, subscription } = req.body; 
@@ -73,10 +78,39 @@ const updateSubscription = async (req, res) => {
     res.json(updatingSubscription);
 }
 
+const updateAvatar = async (req, res) => { 
+    const { file } = req;
+    if (!file) {
+        res.status(400).json({message: "Missing files"});
+        return
+    }
+    const { path: oldPath, filename } = req.file;
+       
+    const tmpPath = path.join("tmp", filename)
+    const image = await Jimp.read(tmpPath);
+    image.resize(250, 250);
+    image.write(tmpPath)
+   
+    const avatarPath = path.resolve("public", "avatars");
+    const newPath = path.join(avatarPath, filename);
+       
+    await fs.rename(oldPath, newPath);
+    const avatarURL = path.join("avatars", filename);
+    
+    
+    const { _id } = req.user;
+    await User.findByIdAndUpdate(_id, { avatarURL: avatarURL }, { new: true });
+    
+    // res.json({ avatarURL : `http://localhost:${PORT}/${avatarURL}`});
+    res.json({ avatarURL : avatarURL})
+    
+}
+
 export default {
     register,
     login,
     current,
     logout,
     updateSubscription,
+    updateAvatar
 }
