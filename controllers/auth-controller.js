@@ -4,11 +4,14 @@ import jwt from "jsonwebtoken";
 import fs from "fs/promises";
 import path from "path";
 import gravatar from "gravatar";
-import User from "../models/user.js";
+import { nanoid } from "nanoid";
 import Jimp from "jimp";
+import User from "../models/user.js";
+import sendEmail from "../helpers/sendEmail.js";
+import createVerifyEmail from "../helpers/createVerifyEmail.js";
 
 dotenv.config();
-const { SECRET_KEY, PORT } = process.env;
+const { SECRET_KEY } = process.env;
 
 const register = async (req, res) => {
     const { email, password } = req.body;
@@ -20,34 +23,77 @@ const register = async (req, res) => {
         return;
     }
     const hashPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({...req.body, password:hashPassword, avatarURL});
+    const verificationToken = nanoid();
+    const newUser = await User.create({...req.body, password:hashPassword, avatarURL, verificationToken});
+
+    const verifyEmail = createVerifyEmail({email, verificationToken});
+
+    await sendEmail(verifyEmail);
 
     res.status(201).json({
         user: {
             email: newUser.email,
             subscription: newUser.subscription,
-            avatarURL: avatarURL
-        }
+            avatarURL: avatarURL,
+            }
     })
 };
 
-const login = async(req, res) => {
-    const { email, password, subscription } = req.body; 
+const verify = async (req, res) => {
+    const { verificationToken } = req.params;
+  
+    const user = await User.findOne({ verificationToken });
+  
+    if (!user) {
+        res.status(404).json({ message: 'User not found' }); 
+        return;
+    }
+
+    await User.findByIdAndUpdate(user.id, { verify: true, verificationToken: "null" });
+    
+    res.status(200).json({ message: 'Verification successful' });
+};
+
+const resendVerifyEmail = async (req, res) => {
+    const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) { 
+        res.status(404).json({ message: 'Not found' }); 
+        return
+    }
+    if (user.verify) {
+        res.status(400).json({ message: 'Verification has already been passed' }); 
+        return
+    }
+
+    const verifyEmail = createVerifyEmail({email, verificationToken:user.verificationToken});
+
+    await sendEmail(verifyEmail);
+      res.status(200).json({ message: 'Verification email sent' });
+
+}
+
+const login = async (req, res) => {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
         res.status(401).json({ message: 'Email or password wrong' });
+        return;
+    }
+    if (!user.verify) {
+        res.status(401).json({ message: 'Email not verify' });
         return;
     }
     const passwordCompare = await bcrypt.compare(password, user.password);
     if (!passwordCompare) {
-         res.status(401).json({ message: 'Email or password wrong' });
+        res.status(401).json({ message: 'Email or password wrong' });
         return;
     }
     const payload = {
         id: user._id,
     }
     const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "23h" });
-    await User.findByIdAndUpdate(user._id, {token})
+    await User.findByIdAndUpdate(user._id, { token })
     
     res.status(200).json({
         token,
@@ -56,32 +102,33 @@ const login = async(req, res) => {
             subscription: user.subscription
         }
     })
-}
+};
 
 const current = (req, res) => {
     const { email, subscription } = req.user;
     res.json({
         email,
-        subscription})
-}
+        subscription
+    })
+};
 
 const logout = async (req, res) => {
     const { _id } = req.user;
     await User.findByIdAndUpdate(_id, { token: "" });
-    res.status(204).json({message: "No content"})
-}
+    res.status(204).json({ message: "No content" })
+};
 
 const updateSubscription = async (req, res) => {
     const { _id } = req.user;
     const { subscription } = req.body;
     const updatingSubscription = await User.findByIdAndUpdate(_id, { subscription: subscription }, { new: true });
     res.json(updatingSubscription);
-}
+};
 
-const updateAvatar = async (req, res) => { 
+const updateAvatar = async (req, res) => {
     const { file } = req;
     if (!file) {
-        res.status(400).json({message: "Missing files"});
+        res.status(400).json({ message: "Missing files" });
         return
     }
     const { path: oldPath, filename } = req.file;
@@ -101,13 +148,15 @@ const updateAvatar = async (req, res) => {
     const { _id } = req.user;
     await User.findByIdAndUpdate(_id, { avatarURL: avatarURL }, { new: true });
     
-    // res.json({ avatarURL : `http://localhost:${PORT}/${avatarURL}`});
-    res.json({ avatarURL : avatarURL})
+    res.json({ avatarURL: avatarURL })
     
-}
+};
+
 
 export default {
     register,
+    verify,
+    resendVerifyEmail,
     login,
     current,
     logout,
