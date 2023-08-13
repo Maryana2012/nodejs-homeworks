@@ -49,7 +49,7 @@ const verify = async (req, res) => {
         return;
     }
 
-    await User.findByIdAndUpdate(user.id, { verify: true, verificationToken: "null" });
+    await User.findByIdAndUpdate(user.id, { verify: true, verificationToken: " " });
     
     res.status(200).json({ message: 'Verification successful' });
 };
