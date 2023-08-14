@@ -8,7 +8,11 @@ import upload from "../../middlewars/upload.js";
 
 const authRouter = express.Router();
 
-authRouter.post('/users/register', isEmptyBody, userValidator.userRegisterValidator, authController.register )
+authRouter.post('/users/register', isEmptyBody, userValidator.userRegisterValidator, authController.register);
+
+authRouter.get('/users/verify/:verificationToken', authController.verify);
+
+authRouter.post('/users/verify', userValidator.userEmailValidator, authController.resendVerifyEmail);
 
 authRouter.post('/users/login', isEmptyBody, userValidator.userLoginValidator, authController.login);
 
